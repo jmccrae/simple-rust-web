@@ -46,6 +46,9 @@ pub enum TranslatorError {
     TranslationError(String)
 }
 
+#[allow(dead_code)]
+type TranslatorResult<A> = Result<A, TranslatorError>;
+
 /// A translator that can convert query arguments into a serializable object
 pub trait Translator<A : Serialize> : Sync + Send {
     fn convert(&self, HashMap<String, String>) -> Result<A,TranslatorError>;
