@@ -1,0 +1,14 @@
+[package]
+name = "simple-rust-web"
+version = "0.1.0"
+authors = ["John P. McCrae <john@mccr.ae>"]
+
+[dependencies]
+iron = "*"
+handlebars = "*"
+percent-encoding = "*"
+serde = "*"
+serde_derive = "*"
+serde_json = "*"
+clap = "*"
+params = "*"
