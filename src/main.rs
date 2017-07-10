@@ -165,7 +165,7 @@ static ABOUT     : &'static str = "Simple framework for making Rust Webapps";
 struct TestTranslator;
 
 impl Translator<String> for TestTranslator {
-    fn convert(&self, v : HashMap<String, String>) -> String { v["test"].clone() }
+    fn convert(&self, v : HashMap<String, String>) -> Result<String,TranslatorError> { Ok(v["test"].clone()) }
 }
 
 fn init(server : &mut Server) {

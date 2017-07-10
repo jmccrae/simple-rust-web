@@ -1,14 +1,16 @@
 use handlebars::Handlebars;
-use iron;
 use iron::headers::ContentType;
 use iron::modifiers::Header;
 use iron::prelude::*;
+use iron;
 use params::Map;
-use std::str::from_utf8;
 use serde::Serialize;
 use serde_json;
 use std::collections::HashMap;
 use std::error::Error;
+use std::result::Result;
+use std::str::from_utf8;
+
 
 #[derive(Debug,Clone,Serialize)]
 struct LayoutPage {
@@ -37,23 +39,44 @@ impl Renderer for StaticRenderer {
     }
 }
 
+/// Errors from the translation
+#[allow(dead_code)]
+pub enum TranslatorError {
+    ParameterError(String),
+    TranslationError(String)
+}
+
 /// A translator that can convert query arguments into a serializable object
 pub trait Translator<A : Serialize> : Sync + Send {
-    fn convert(&self, HashMap<String, String>) -> A;
+    fn convert(&self, HashMap<String, String>) -> Result<A,TranslatorError>;
 }
 
 impl<A : Serialize> Renderer for Box<Translator<A>> {
     fn render(&self, args : HashMap<String, String>, _ : &Map, _ : &Handlebars, _:usize) -> IronResult<Response> {
-        match serde_json::to_string(&self.convert(args)) {
-            Ok(s) => {
-                Ok(Response::with((
-                    iron::status::Ok,
-                    Header(ContentType::json()), s)))
+        match self.convert(args) {
+            Ok(data) => {
+                match serde_json::to_string(&data) {
+                    Ok(s) => {
+                        Ok(Response::with((
+                                    iron::status::Ok,
+                                    Header(ContentType::json()), s)))
+                    },
+                    Err(e) => {
+                        Ok(Response::with((
+                                    iron::status::InternalServerError,
+                                    Header(ContentType::plaintext()), e.description())))
+                    }
+                }
             },
-            Err(e) => {
+            Err(TranslatorError::ParameterError(msg)) => {
                 Ok(Response::with((
-                        iron::status::InternalServerError,
-                        Header(ContentType::plaintext()), e.description())))
+                            iron::status::BadRequest,
+                            Header(ContentType::plaintext()), msg)))
+            },
+            Err(TranslatorError::TranslationError(msg)) =>{
+                Ok(Response::with((
+                            iron::status::InternalServerError,
+                            Header(ContentType::plaintext()), msg)))
             }
         }
     }
@@ -65,8 +88,22 @@ pub struct TranslatorRenderer<A : Serialize>(pub String, pub String, pub Box<Tra
 impl<A: Serialize> Renderer for TranslatorRenderer<A> {
     fn render(&self, args : HashMap<String, String>, _ : &Map, hb : &Handlebars, _:usize) -> IronResult<Response> {
         let title = format!("{} - {}", ::APP_TITLE, self.0);
-        render_ok(hb, title.to_string(), hb.render(&self.1, &self.2.convert(args)).
-                                         expect(&format!("Could not use template {}", self.1)))
+        match self.2.convert(args) {
+            Ok(body) => {
+                render_ok(hb, title.to_string(), hb.render(&self.1, &body).
+                          expect(&format!("Could not use template {}", self.1)))
+            },
+            Err(TranslatorError::ParameterError(msg)) => {
+                Ok(Response::with((
+                            iron::status::BadRequest,
+                            Header(ContentType::plaintext()), msg)))
+            },
+            Err(TranslatorError::TranslationError(msg)) =>{
+                Ok(Response::with((
+                            iron::status::InternalServerError,
+                            Header(ContentType::plaintext()), msg)))
+            }
+        }
     }
 }
 
